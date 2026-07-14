@@ -3,6 +3,8 @@ const net = require("net");
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
 
+const store = new Map();
+
 // Uncomment the code below to pass the first stage
 const server = net.createServer((connection) => {
   connection.on("data", (data) => {
@@ -29,6 +31,19 @@ const server = net.createServer((connection) => {
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
+        } else if (command === "set") {
+          const key = args[1];
+          const value = args[2];
+          store.set(key, value);
+          connection.write("+OK\r\n");
+        } else if (command === "get") {
+          const key = args[1];
+          const value = store.get(key);
+          if (value !== undefined) {
+            connection.write(`$${value.length}\r\n${value}\r\n`);
+          } else {
+            connection.write("$-1\r\n");
+          }
         }
       }
     }
