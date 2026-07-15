@@ -34,13 +34,26 @@ const server = net.createServer((connection) => {
         } else if (command === "set") {
           const key = args[1];
           const value = args[2];
-          store.set(key, value);
+          let expiresAt = null;
+          
+          if (args.length >= 5 && args[3].toLowerCase() === "px") {
+            const px = parseInt(args[4], 10);
+            expiresAt = Date.now() + px;
+          }
+          
+          store.set(key, { value, expiresAt });
           connection.write("+OK\r\n");
         } else if (command === "get") {
           const key = args[1];
-          const value = store.get(key);
-          if (value !== undefined) {
-            connection.write(`$${value.length}\r\n${value}\r\n`);
+          const entry = store.get(key);
+          
+          if (entry !== undefined) {
+            if (entry.expiresAt !== null && Date.now() > entry.expiresAt) {
+              store.delete(key);
+              connection.write("$-1\r\n");
+            } else {
+              connection.write(`$${entry.value.length}\r\n${entry.value}\r\n`);
+            }
           } else {
             connection.write("$-1\r\n");
           }
