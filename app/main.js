@@ -57,6 +57,20 @@ const server = net.createServer((connection) => {
           } else {
             connection.write("$-1\r\n");
           }
+        } else if (command === "rpush") {
+          const key = args[1];
+          const elements = args.slice(2);
+          
+          let list = [];
+          const entry = store.get(key);
+          if (entry && Array.isArray(entry.value)) {
+            list = entry.value;
+          }
+          
+          list.push(...elements);
+          store.set(key, { value: list, expiresAt: null });
+          
+          connection.write(`:${list.length}\r\n`);
         }
       }
     }
