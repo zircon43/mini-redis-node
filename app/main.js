@@ -73,7 +73,7 @@ const server = net.createServer((connection) => {
           connection.write(`:${list.length}\r\n`);
         } else if (command === "lrange") {
           const key = args[1];
-          const start = parseInt(args[2], 10);
+          let start = parseInt(args[2], 10);
           let stop = parseInt(args[3], 10);
           
           const entry = store.get(key);
@@ -82,6 +82,9 @@ const server = net.createServer((connection) => {
             connection.write("*0\r\n");
           } else {
             const list = entry.value;
+            
+            if (start < 0) start = Math.max(0, list.length + start);
+            if (stop < 0) stop = Math.max(0, list.length + stop);
             
             if (start >= list.length || start > stop) {
               connection.write("*0\r\n");
