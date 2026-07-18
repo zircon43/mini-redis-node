@@ -71,6 +71,22 @@ const server = net.createServer((connection) => {
           store.set(key, { value: list, expiresAt: null });
           
           connection.write(`:${list.length}\r\n`);
+        } else if (command === "lpush") {
+          const key = args[1];
+          const elements = args.slice(2);
+          
+          let list = [];
+          const entry = store.get(key);
+          if (entry && Array.isArray(entry.value)) {
+            list = entry.value;
+          }
+          
+          for (const elem of elements) {
+            list.unshift(elem);
+          }
+          store.set(key, { value: list, expiresAt: null });
+          
+          connection.write(`:${list.length}\r\n`);
         } else if (command === "lrange") {
           const key = args[1];
           let start = parseInt(args[2], 10);
