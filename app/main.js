@@ -118,6 +118,15 @@ const server = net.createServer((connection) => {
               connection.write(response);
             }
           }
+        } else if (command === "llen") {
+          const key = args[1];
+          const entry = store.get(key);
+          
+          if (!entry || !Array.isArray(entry.value)) {
+            connection.write(":0\r\n");
+          } else {
+            connection.write(`:${entry.value.length}\r\n`);
+          }
         }
       }
     }
