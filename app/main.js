@@ -127,6 +127,20 @@ const server = net.createServer((connection) => {
           } else {
             connection.write(`:${entry.value.length}\r\n`);
           }
+        } else if (command === "lpop") {
+          const key = args[1];
+          const entry = store.get(key);
+          
+          if (!entry || !Array.isArray(entry.value) || entry.value.length === 0) {
+            connection.write("$-1\r\n");
+          } else {
+            const list = entry.value;
+            const removed = list.shift();
+            if (list.length === 0) {
+              store.delete(key);
+            }
+            connection.write(`$${removed.length}\r\n${removed}\r\n`);
+          }
         }
       }
     }
