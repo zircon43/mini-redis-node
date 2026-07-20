@@ -130,16 +130,28 @@ const server = net.createServer((connection) => {
         } else if (command === "lpop") {
           const key = args[1];
           const entry = store.get(key);
+          const hasCount = args.length >= 3;
+          let count = hasCount ? parseInt(args[2], 10) : 1;
           
           if (!entry || !Array.isArray(entry.value) || entry.value.length === 0) {
-            connection.write("$-1\r\n");
+            connection.write(hasCount ? "*-1\r\n" : "$-1\r\n");
           } else {
             const list = entry.value;
-            const removed = list.shift();
-            if (list.length === 0) {
-              store.delete(key);
+            
+            if (!hasCount) {
+              const removed = list.shift();
+              if (list.length === 0) store.delete(key);
+              connection.write(`$${removed.length}\r\n${removed}\r\n`);
+            } else {
+              const removedElements = list.splice(0, count);
+              if (list.length === 0) store.delete(key);
+              
+              let response = `*${removedElements.length}\r\n`;
+              for (const item of removedElements) {
+                response += `$${item.length}\r\n${item}\r\n`;
+              }
+              connection.write(response);
             }
-            connection.write(`$${removed.length}\r\n${removed}\r\n`);
           }
         }
       }
