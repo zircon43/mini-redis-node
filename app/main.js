@@ -4,6 +4,24 @@ const net = require("net");
 console.log("Logs from your program will appear here!");
 
 const store = new Map();
+const blockedClients = new Map();
+
+function checkBlockedClients(key) {
+  if (!blockedClients.has(key)) return;
+  const queue = blockedClients.get(key);
+  const entry = store.get(key);
+  
+  if (!entry || !Array.isArray(entry.value)) return;
+  const list = entry.value;
+
+  while (queue.length > 0 && list.length > 0) {
+    const blockedConnection = queue.shift();
+    const removed = list.shift();
+    blockedConnection.write(`*2\r\n$${key.length}\r\n${key}\r\n$${removed.length}\r\n${removed}\r\n`);
+  }
+  
+  if (list.length === 0) store.delete(key);
+}
 
 // Uncomment the code below to pass the first stage
 const server = net.createServer((connection) => {
@@ -71,6 +89,7 @@ const server = net.createServer((connection) => {
           store.set(key, { value: list, expiresAt: null });
           
           connection.write(`:${list.length}\r\n`);
+          checkBlockedClients(key);
         } else if (command === "lpush") {
           const key = args[1];
           const elements = args.slice(2);
@@ -87,6 +106,7 @@ const server = net.createServer((connection) => {
           store.set(key, { value: list, expiresAt: null });
           
           connection.write(`:${list.length}\r\n`);
+          checkBlockedClients(key);
         } else if (command === "lrange") {
           const key = args[1];
           let start = parseInt(args[2], 10);
@@ -152,6 +172,20 @@ const server = net.createServer((connection) => {
               }
               connection.write(response);
             }
+          }
+        } else if (command === "blpop") {
+          const key = args[1];
+          const entry = store.get(key);
+          if (entry && Array.isArray(entry.value) && entry.value.length > 0) {
+            const list = entry.value;
+            const removed = list.shift();
+            if (list.length === 0) store.delete(key);
+            connection.write(`*2\r\n$${key.length}\r\n${key}\r\n$${removed.length}\r\n${removed}\r\n`);
+          } else {
+            if (!blockedClients.has(key)) {
+              blockedClients.set(key, []);
+            }
+            blockedClients.get(key).push(connection);
           }
         }
       }
