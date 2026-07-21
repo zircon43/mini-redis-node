@@ -15,7 +15,9 @@ function checkBlockedClients(key) {
   const list = entry.value;
 
   while (queue.length > 0 && list.length > 0) {
-    const blockedConnection = queue.shift();
+    const clientObj = queue.shift();
+    if (clientObj.timer) clearTimeout(clientObj.timer);
+    const blockedConnection = clientObj.connection;
     const removed = list.shift();
     blockedConnection.write(`*2\r\n$${key.length}\r\n${key}\r\n$${removed.length}\r\n${removed}\r\n`);
   }
@@ -175,6 +177,9 @@ const server = net.createServer((connection) => {
           }
         } else if (command === "blpop") {
           const key = args[1];
+          const timeoutStr = args[2];
+          const timeout = timeoutStr ? parseFloat(timeoutStr) : 0;
+          
           const entry = store.get(key);
           if (entry && Array.isArray(entry.value) && entry.value.length > 0) {
             const list = entry.value;
@@ -185,7 +190,23 @@ const server = net.createServer((connection) => {
             if (!blockedClients.has(key)) {
               blockedClients.set(key, []);
             }
-            blockedClients.get(key).push(connection);
+            
+            const clientObj = { connection, timer: null };
+            
+            if (timeout > 0) {
+              clientObj.timer = setTimeout(() => {
+                const queue = blockedClients.get(key);
+                if (queue) {
+                  const index = queue.indexOf(clientObj);
+                  if (index !== -1) {
+                    queue.splice(index, 1);
+                    connection.write("*-1\r\n");
+                  }
+                }
+              }, timeout * 1000);
+            }
+            
+            blockedClients.get(key).push(clientObj);
           }
         }
       }
