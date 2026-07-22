@@ -208,6 +208,18 @@ const server = net.createServer((connection) => {
             
             blockedClients.get(key).push(clientObj);
           }
+        } else if (command === "type") {
+          const key = args[1];
+          const entry = store.get(key);
+          
+          if (!entry || (entry.expiresAt !== null && Date.now() > entry.expiresAt)) {
+            if (entry) store.delete(key);
+            connection.write("+none\r\n");
+          } else if (Array.isArray(entry.value)) {
+            connection.write("+list\r\n");
+          } else {
+            connection.write("+string\r\n");
+          }
         }
       }
     }
