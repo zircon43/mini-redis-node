@@ -215,11 +215,28 @@ const server = net.createServer((connection) => {
           if (!entry || (entry.expiresAt !== null && Date.now() > entry.expiresAt)) {
             if (entry) store.delete(key);
             connection.write("+none\r\n");
+          } else if (entry.type === "stream") {
+            connection.write("+stream\r\n");
           } else if (Array.isArray(entry.value)) {
             connection.write("+list\r\n");
           } else {
             connection.write("+string\r\n");
           }
+        } else if (command === "xadd") {
+          const key = args[1];
+          const entryId = args[2];
+          const kvs = args.slice(3);
+          
+          let streamEntries = [];
+          const entry = store.get(key);
+          if (entry && entry.type === "stream") {
+            streamEntries = entry.value;
+          }
+          
+          streamEntries.push({ id: entryId, kvs });
+          store.set(key, { type: "stream", value: streamEntries, expiresAt: null });
+          
+          connection.write(`$${entryId.length}\r\n${entryId}\r\n`);
         }
       }
     }
