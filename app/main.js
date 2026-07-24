@@ -233,10 +233,28 @@ const server = net.createServer((connection) => {
             streamEntries = entry.value;
           }
           
-          streamEntries.push({ id: entryId, kvs });
-          store.set(key, { type: "stream", value: streamEntries, expiresAt: null });
-          
-          connection.write(`$${entryId.length}\r\n${entryId}\r\n`);
+          const [newMs, newSeq] = entryId.split("-").map(Number);
+          if (newMs === 0 && newSeq === 0) {
+            connection.write("-ERR The ID specified in XADD must be greater than 0-0\r\n");
+          } else {
+            let isValid = true;
+            if (streamEntries.length > 0) {
+              const lastId = streamEntries[streamEntries.length - 1].id;
+              const [lastMs, lastSeq] = lastId.split("-").map(Number);
+              
+              if (newMs < lastMs || (newMs === lastMs && newSeq <= lastSeq)) {
+                isValid = false;
+                connection.write("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n");
+              }
+            }
+            
+            if (isValid) {
+              streamEntries.push({ id: entryId, kvs });
+              store.set(key, { type: "stream", value: streamEntries, expiresAt: null });
+              
+              connection.write(`$${entryId.length}\r\n${entryId}\r\n`);
+            }
+          }
         }
       }
     }
