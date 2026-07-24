@@ -224,7 +224,7 @@ const server = net.createServer((connection) => {
           }
         } else if (command === "xadd") {
           const key = args[1];
-          const entryId = args[2];
+          let entryId = args[2];
           const kvs = args.slice(3);
           
           let streamEntries = [];
@@ -233,7 +233,28 @@ const server = net.createServer((connection) => {
             streamEntries = entry.value;
           }
           
-          const [newMs, newSeq] = entryId.split("-").map(Number);
+          let [newMsStr, newSeqStr] = entryId.split("-");
+          let newMs = Number(newMsStr);
+          let newSeq;
+          
+          if (newSeqStr === "*") {
+            if (streamEntries.length > 0) {
+              const lastId = streamEntries[streamEntries.length - 1].id;
+              const [lastMs, lastSeq] = lastId.split("-").map(Number);
+              
+              if (newMs === lastMs) {
+                newSeq = lastSeq + 1;
+              } else {
+                newSeq = newMs === 0 ? 1 : 0;
+              }
+            } else {
+              newSeq = newMs === 0 ? 1 : 0;
+            }
+            entryId = `${newMs}-${newSeq}`;
+          } else {
+            newSeq = Number(newSeqStr);
+          }
+          
           if (newMs === 0 && newSeq === 0) {
             connection.write("-ERR The ID specified in XADD must be greater than 0-0\r\n");
           } else {
