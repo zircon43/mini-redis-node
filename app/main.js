@@ -233,6 +233,16 @@ const server = net.createServer((connection) => {
             streamEntries = entry.value;
           }
           
+          if (entryId === "*") {
+            let newMs = Date.now();
+            if (streamEntries.length > 0) {
+              const lastId = streamEntries[streamEntries.length - 1].id;
+              const [lastMs] = lastId.split("-").map(Number);
+              if (newMs < lastMs) newMs = lastMs;
+            }
+            entryId = `${newMs}-*`;
+          }
+          
           let [newMsStr, newSeqStr] = entryId.split("-");
           let newMs = Number(newMsStr);
           let newSeq;
