@@ -286,6 +286,48 @@ const server = net.createServer((connection) => {
               connection.write(`$${entryId.length}\r\n${entryId}\r\n`);
             }
           }
+        } else if (command === "xrange") {
+          const key = args[1];
+          const startArg = args[2];
+          const endArg = args[3];
+          
+          let startId = startArg.includes("-") ? startArg : `${startArg}-0`;
+          if (startArg === "-") startId = "0-0";
+          
+          let endId = endArg.includes("-") ? endArg : `${endArg}-${Infinity}`;
+          if (endArg === "+") endId = `${Infinity}-${Infinity}`;
+          
+          const entry = store.get(key);
+          if (!entry || entry.type !== "stream") {
+            connection.write("*0\r\n");
+          } else {
+            const streamEntries = entry.value;
+            
+            const getMsSeq = (id) => {
+               const parts = id.split("-");
+               return [Number(parts[0]), Number(parts[1])];
+            };
+            
+            const [startMs, startSeq] = getMsSeq(startId);
+            const [endMs, endSeq] = getMsSeq(endId);
+            
+            const results = streamEntries.filter(e => {
+               const [eMs, eSeq] = getMsSeq(e.id);
+               if (eMs < startMs || (eMs === startMs && eSeq < startSeq)) return false;
+               if (eMs > endMs || (eMs === endMs && eSeq > endSeq)) return false;
+               return true;
+            });
+            
+            let res = `*${results.length}\r\n`;
+            for (const resEntry of results) {
+               res += `*2\r\n$${resEntry.id.length}\r\n${resEntry.id}\r\n`;
+               res += `*${resEntry.kvs.length}\r\n`;
+               for (const kv of resEntry.kvs) {
+                  res += `$${kv.length}\r\n${kv}\r\n`;
+               }
+            }
+            connection.write(res);
+          }
         }
       }
     }
