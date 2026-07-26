@@ -5,6 +5,66 @@ console.log("Logs from your program will appear here!");
 
 const store = new Map();
 const blockedClients = new Map();
+const blockedXreadClients = [];
+
+function checkBlockedXreadClients(key) {
+  for (let i = 0; i < blockedXreadClients.length; i++) {
+    const client = blockedXreadClients[i];
+    if (client.resolved) continue;
+    if (client.keys.includes(key)) {
+      let hasNewData = false;
+      let streamResponses = [];
+      const getMsSeq = (id) => {
+         const parts = id.split("-");
+         return [Number(parts[0]), Number(parts[1])];
+      };
+      
+      for (let j = 0; j < client.keys.length; j++) {
+         const clientKey = client.keys[j];
+         const startArg = client.ids[j];
+         const startId = startArg.includes("-") ? startArg : `${startArg}-0`;
+         const [startMs, startSeq] = getMsSeq(startId);
+         
+         const entry = store.get(clientKey);
+         if (entry && entry.type === "stream") {
+            const streamEntries = entry.value;
+            const results = streamEntries.filter(e => {
+               const [eMs, eSeq] = getMsSeq(e.id);
+               if (eMs < startMs || (eMs === startMs && eSeq <= startSeq)) return false;
+               return true;
+            });
+            
+            if (results.length > 0) {
+               hasNewData = true;
+               let streamRes = `*2\r\n$${clientKey.length}\r\n${clientKey}\r\n`;
+               streamRes += `*${results.length}\r\n`;
+               for (const resEntry of results) {
+                  streamRes += `*2\r\n$${resEntry.id.length}\r\n${resEntry.id}\r\n`;
+                  streamRes += `*${resEntry.kvs.length}\r\n`;
+                  for (const kv of resEntry.kvs) {
+                     streamRes += `$${kv.length}\r\n${kv}\r\n`;
+                  }
+               }
+               streamResponses.push(streamRes);
+            }
+         }
+      }
+      
+      if (hasNewData) {
+         client.resolved = true;
+         if (client.timerId) clearTimeout(client.timerId);
+         let res = `*${streamResponses.length}\r\n` + streamResponses.join("");
+         client.connection.write(res);
+      }
+    }
+  }
+  
+  for (let i = blockedXreadClients.length - 1; i >= 0; i--) {
+    if (blockedXreadClients[i].resolved) {
+      blockedXreadClients.splice(i, 1);
+    }
+  }
+}
 
 function checkBlockedClients(key) {
   if (!blockedClients.has(key)) return;
@@ -284,6 +344,7 @@ const server = net.createServer((connection) => {
               store.set(key, { type: "stream", value: streamEntries, expiresAt: null });
               
               connection.write(`$${entryId.length}\r\n${entryId}\r\n`);
+              checkBlockedXreadClients(key);
             }
           }
         } else if (command === "xrange") {
@@ -329,10 +390,31 @@ const server = net.createServer((connection) => {
             connection.write(res);
           }
         } else if (command === "xread") {
-          if (args[1].toLowerCase() === "streams") {
-            const numStreams = (args.length - 2) / 2;
-            const keys = args.slice(2, 2 + numStreams);
-            const ids = args.slice(2 + numStreams);
+          let isBlock = false;
+          let timeoutMs = 0;
+          let streamsArgIdx = 1;
+          
+          if (args[1].toLowerCase() === "block") {
+            isBlock = true;
+            timeoutMs = Number(args[2]);
+            streamsArgIdx = 3;
+          }
+          
+          if (args[streamsArgIdx].toLowerCase() === "streams") {
+            const numStreams = (args.length - (streamsArgIdx + 1)) / 2;
+            const keys = args.slice(streamsArgIdx + 1, streamsArgIdx + 1 + numStreams);
+            const ids = args.slice(streamsArgIdx + 1 + numStreams);
+            
+            for (let i = 0; i < numStreams; i++) {
+               if (ids[i] === "$") {
+                  const entry = store.get(keys[i]);
+                  if (entry && entry.type === "stream" && entry.value.length > 0) {
+                     ids[i] = entry.value[entry.value.length - 1].id;
+                  } else {
+                     ids[i] = "0-0";
+                  }
+               }
+            }
             
             const getMsSeq = (id) => {
                const parts = id.split("-");
@@ -371,7 +453,26 @@ const server = net.createServer((connection) => {
             }
             
             if (streamResponses.length === 0) {
-               connection.write("*-1\r\n");
+               if (isBlock) {
+                 const clientObj = {
+                   connection,
+                   keys,
+                   ids,
+                   timerId: null,
+                   resolved: false
+                 };
+                 if (timeoutMs > 0) {
+                   clientObj.timerId = setTimeout(() => {
+                     if (!clientObj.resolved) {
+                       clientObj.resolved = true;
+                       connection.write("*-1\r\n");
+                     }
+                   }, timeoutMs);
+                 }
+                 blockedXreadClients.push(clientObj);
+               } else {
+                 connection.write("*-1\r\n");
+               }
             } else {
                let res = `*${streamResponses.length}\r\n` + streamResponses.join("");
                connection.write(res);
