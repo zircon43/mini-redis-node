@@ -328,6 +328,55 @@ const server = net.createServer((connection) => {
             }
             connection.write(res);
           }
+        } else if (command === "xread") {
+          if (args[1].toLowerCase() === "streams") {
+            const numStreams = (args.length - 2) / 2;
+            const keys = args.slice(2, 2 + numStreams);
+            const ids = args.slice(2 + numStreams);
+            
+            const getMsSeq = (id) => {
+               const parts = id.split("-");
+               return [Number(parts[0]), Number(parts[1])];
+            };
+            
+            let streamResponses = [];
+            for (let i = 0; i < numStreams; i++) {
+               const key = keys[i];
+               const startArg = ids[i];
+               const startId = startArg.includes("-") ? startArg : `${startArg}-0`;
+               const [startMs, startSeq] = getMsSeq(startId);
+               
+               const entry = store.get(key);
+               if (entry && entry.type === "stream") {
+                  const streamEntries = entry.value;
+                  const results = streamEntries.filter(e => {
+                     const [eMs, eSeq] = getMsSeq(e.id);
+                     if (eMs < startMs || (eMs === startMs && eSeq <= startSeq)) return false;
+                     return true;
+                  });
+                  
+                  if (results.length > 0) {
+                     let streamRes = `*2\r\n$${key.length}\r\n${key}\r\n`;
+                     streamRes += `*${results.length}\r\n`;
+                     for (const resEntry of results) {
+                        streamRes += `*2\r\n$${resEntry.id.length}\r\n${resEntry.id}\r\n`;
+                        streamRes += `*${resEntry.kvs.length}\r\n`;
+                        for (const kv of resEntry.kvs) {
+                           streamRes += `$${kv.length}\r\n${kv}\r\n`;
+                        }
+                     }
+                     streamResponses.push(streamRes);
+                  }
+               }
+            }
+            
+            if (streamResponses.length === 0) {
+               connection.write("*-1\r\n");
+            } else {
+               let res = `*${streamResponses.length}\r\n` + streamResponses.join("");
+               connection.write(res);
+            }
+          }
         }
       }
     }
