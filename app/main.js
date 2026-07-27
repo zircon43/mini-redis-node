@@ -111,6 +111,25 @@ const server = net.createServer((connection) => {
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
+        } else if (command === "incr") {
+          const key = args[1];
+          const entry = store.get(key);
+          let val = 0;
+          let isValid = true;
+          
+          if (entry !== undefined) {
+             val = parseInt(entry.value, 10);
+             if (isNaN(val)) {
+                isValid = false;
+                connection.write("-ERR value is not an integer or out of range\r\n");
+             }
+          }
+          
+          if (isValid) {
+             val++;
+             store.set(key, { value: val.toString(), type: "string", expiresAt: entry ? entry.expiresAt : null });
+             connection.write(`:${val}\r\n`);
+          }
         } else if (command === "set") {
           const key = args[1];
           const value = args[2];
