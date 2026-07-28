@@ -111,6 +111,8 @@ const server = net.createServer((connection) => {
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
+        } else if (command === "multi") {
+          connection.write("+OK\r\n");
         } else if (command === "incr") {
           const key = args[1];
           const entry = store.get(key);
