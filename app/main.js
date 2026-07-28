@@ -113,6 +113,8 @@ const server = net.createServer((connection) => {
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
         } else if (command === "multi") {
           connection.write("+OK\r\n");
+        } else if (command === "exec") {
+          connection.write("-ERR EXEC without MULTI\r\n");
         } else if (command === "incr") {
           const key = args[1];
           const entry = store.get(key);
