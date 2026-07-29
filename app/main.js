@@ -112,9 +112,17 @@ const server = net.createServer((connection) => {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
         } else if (command === "multi") {
+          connection.isMulti = true;
+          connection.queued = [];
           connection.write("+OK\r\n");
         } else if (command === "exec") {
-          connection.write("-ERR EXEC without MULTI\r\n");
+          if (!connection.isMulti) {
+            connection.write("-ERR EXEC without MULTI\r\n");
+          } else {
+            connection.write(`*${connection.queued.length}\r\n`);
+            connection.isMulti = false;
+            connection.queued = [];
+          }
         } else if (command === "incr") {
           const key = args[1];
           const entry = store.get(key);
