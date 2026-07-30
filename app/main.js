@@ -106,7 +106,10 @@ const server = net.createServer((connection) => {
       if (args.length > 0) {
         const command = args[0].toLowerCase();
         
-        if (command === "ping") {
+        if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi") {
+          connection.queued.push(args);
+          connection.write("+QUEUED\r\n");
+        } else if (command === "ping") {
           connection.write("+PONG\r\n");
         } else if (command === "echo") {
           const arg = args[1];
