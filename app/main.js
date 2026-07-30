@@ -122,8 +122,27 @@ const server = net.createServer((connection) => {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
           } else {
-            connection.write(`*${connection.queued.length}\r\n`);
+            let execResponses = [];
+            const originalWrite = connection.write.bind(connection);
+            connection.write = (data) => {
+              execResponses.push(data);
+            };
+            
             connection.isMulti = false;
+            const queued = connection.queued;
+            
+            for (const qArgs of queued) {
+               let respStr = `*${qArgs.length}\r\n`;
+               for (const arg of qArgs) {
+                  respStr += `$${arg.length}\r\n${arg}\r\n`;
+               }
+               connection.emit("data", Buffer.from(respStr));
+            }
+            
+            connection.write = originalWrite;
+            let finalRes = `*${execResponses.length}\r\n` + execResponses.join("");
+            connection.write(finalRes);
+            
             connection.queued = [];
           }
         } else if (command === "incr") {
