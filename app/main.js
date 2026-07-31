@@ -118,6 +118,14 @@ const server = net.createServer((connection) => {
           connection.isMulti = true;
           connection.queued = [];
           connection.write("+OK\r\n");
+        } else if (command === "discard") {
+          if (!connection.isMulti) {
+            connection.write("-ERR DISCARD without MULTI\r\n");
+          } else {
+            connection.isMulti = false;
+            connection.queued = [];
+            connection.write("+OK\r\n");
+          }
         } else if (command === "exec") {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
