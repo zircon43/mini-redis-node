@@ -126,6 +126,8 @@ const server = net.createServer((connection) => {
             connection.queued = [];
             connection.write("+OK\r\n");
           }
+        } else if (command === "watch") {
+          connection.write("+OK\r\n");
         } else if (command === "exec") {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
