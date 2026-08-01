@@ -106,7 +106,7 @@ const server = net.createServer((connection) => {
       if (args.length > 0) {
         const command = args[0].toLowerCase();
         
-        if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi") {
+        if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi" && command !== "watch") {
           connection.queued.push(args);
           connection.write("+QUEUED\r\n");
         } else if (command === "ping") {
@@ -127,7 +127,15 @@ const server = net.createServer((connection) => {
             connection.write("+OK\r\n");
           }
         } else if (command === "watch") {
-          connection.write("+OK\r\n");
+          if (connection.isMulti) {
+            connection.write("-ERR WATCH inside MULTI is not allowed\r\n");
+          } else {
+            if (!connection.watchedKeys) connection.watchedKeys = new Set();
+            for (let i = 1; i < args.length; i++) {
+               connection.watchedKeys.add(args[i]);
+            }
+            connection.write("+OK\r\n");
+          }
         } else if (command === "exec") {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
