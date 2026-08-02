@@ -4,6 +4,28 @@ const net = require("net");
 console.log("Logs from your program will appear here!");
 
 const store = new Map();
+const clients = new Set();
+
+const originalStoreSet = store.set.bind(store);
+store.set = (key, value) => {
+   for (const client of clients) {
+       if (client.watchedKeys && client.watchedKeys.has(key)) {
+           client.isDirty = true;
+       }
+   }
+   return originalStoreSet(key, value);
+};
+
+const originalStoreDelete = store.delete.bind(store);
+store.delete = (key) => {
+   for (const client of clients) {
+       if (client.watchedKeys && client.watchedKeys.has(key)) {
+           client.isDirty = true;
+       }
+   }
+   return originalStoreDelete(key);
+};
+
 const blockedClients = new Map();
 const blockedXreadClients = [];
 
@@ -87,6 +109,9 @@ function checkBlockedClients(key) {
 
 // Uncomment the code below to pass the first stage
 const server = net.createServer((connection) => {
+  clients.add(connection);
+  connection.on("end", () => clients.delete(connection));
+  connection.on("error", () => clients.delete(connection));
   connection.on("data", (data) => {
     const lines = data.toString().split("\r\n");
     
@@ -139,6 +164,12 @@ const server = net.createServer((connection) => {
         } else if (command === "exec") {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
+          } else if (connection.isDirty) {
+            connection.write("*-1\r\n");
+            connection.isMulti = false;
+            connection.queued = [];
+            connection.watchedKeys = new Set();
+            connection.isDirty = false;
           } else {
             let execResponses = [];
             const originalWrite = connection.write.bind(connection);
@@ -162,6 +193,8 @@ const server = net.createServer((connection) => {
             connection.write(finalRes);
             
             connection.queued = [];
+            connection.watchedKeys = new Set();
+            connection.isDirty = false;
           }
         } else if (command === "incr") {
           const key = args[1];
