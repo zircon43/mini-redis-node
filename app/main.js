@@ -161,6 +161,10 @@ const server = net.createServer((connection) => {
             }
             connection.write("+OK\r\n");
           }
+        } else if (command === "unwatch") {
+          connection.watchedKeys = new Set();
+          connection.isDirty = false;
+          connection.write("+OK\r\n");
         } else if (command === "exec") {
           if (!connection.isMulti) {
             connection.write("-ERR EXEC without MULTI\r\n");
