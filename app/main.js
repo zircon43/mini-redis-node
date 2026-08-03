@@ -149,6 +149,8 @@ const server = net.createServer((connection) => {
           } else {
             connection.isMulti = false;
             connection.queued = [];
+            connection.watchedKeys = new Set();
+            connection.isDirty = false;
             connection.write("+OK\r\n");
           }
         } else if (command === "watch") {
