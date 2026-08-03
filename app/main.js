@@ -594,4 +594,10 @@ const server = net.createServer((connection) => {
   });
 });
 
-server.listen(6379, "127.0.0.1");
+let port = 6379;
+const portArgIdx = process.argv.indexOf("--port");
+if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
+  port = parseInt(process.argv[portArgIdx + 1], 10);
+}
+
+server.listen(port, "127.0.0.1");
