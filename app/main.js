@@ -5,6 +5,7 @@ console.log("Logs from your program will appear here!");
 
 const store = new Map();
 const clients = new Set();
+const isReplica = process.argv.includes("--replicaof");
 
 const originalStoreSet = store.set.bind(store);
 store.set = (key, value) => {
@@ -140,7 +141,7 @@ const server = net.createServer((connection) => {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
         } else if (command === "info") {
-          const res = "role:master";
+          const res = isReplica ? "role:slave" : "role:master";
           connection.write(`$${res.length}\r\n${res}\r\n`);
         } else if (command === "multi") {
           connection.isMulti = true;
