@@ -139,6 +139,9 @@ const server = net.createServer((connection) => {
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
+        } else if (command === "info") {
+          const res = "role:master";
+          connection.write(`$${res.length}\r\n${res}\r\n`);
         } else if (command === "multi") {
           connection.isMulti = true;
           connection.queued = [];
