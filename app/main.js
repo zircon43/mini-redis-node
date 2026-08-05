@@ -141,7 +141,8 @@ const server = net.createServer((connection) => {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
         } else if (command === "info") {
-          const res = isReplica ? "role:slave" : "role:master";
+          let res = isReplica ? "role:slave" : "role:master";
+          res += "\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\nmaster_repl_offset:0";
           connection.write(`$${res.length}\r\n${res}\r\n`);
         } else if (command === "multi") {
           connection.isMulti = true;
