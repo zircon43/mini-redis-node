@@ -618,11 +618,19 @@ if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
 server.listen(port, "127.0.0.1");
 
 if (isReplica) {
+  let handshakeStep = 0;
   const masterConn = net.createConnection({ host: masterHost, port: masterPort }, () => {
     masterConn.write("*1\r\n$4\r\nPING\r\n");
   });
   
   masterConn.on("data", (data) => {
-    // We will handle the master's responses here later
+    if (handshakeStep === 0) {
+      const portStr = port.toString();
+      masterConn.write(`*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$${portStr.length}\r\n${portStr}\r\n`);
+      handshakeStep++;
+    } else if (handshakeStep === 1) {
+      masterConn.write("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n");
+      handshakeStep++;
+    }
   });
 }
