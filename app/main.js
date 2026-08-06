@@ -5,7 +5,17 @@ console.log("Logs from your program will appear here!");
 
 const store = new Map();
 const clients = new Set();
-const isReplica = process.argv.includes("--replicaof");
+
+let isReplica = false;
+let masterHost = null;
+let masterPort = null;
+const replicaofArgIdx = process.argv.indexOf("--replicaof");
+if (replicaofArgIdx !== -1 && replicaofArgIdx + 1 < process.argv.length) {
+  isReplica = true;
+  const parts = process.argv[replicaofArgIdx + 1].split(" ");
+  masterHost = parts[0];
+  masterPort = parseInt(parts[1], 10);
+}
 
 const originalStoreSet = store.set.bind(store);
 store.set = (key, value) => {
@@ -606,3 +616,13 @@ if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
 }
 
 server.listen(port, "127.0.0.1");
+
+if (isReplica) {
+  const masterConn = net.createConnection({ host: masterHost, port: masterPort }, () => {
+    masterConn.write("*1\r\n$4\r\nPING\r\n");
+  });
+  
+  masterConn.on("data", (data) => {
+    // We will handle the master's responses here later
+  });
+}
