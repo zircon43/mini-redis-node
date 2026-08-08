@@ -147,6 +147,8 @@ const server = net.createServer((connection) => {
           connection.write("+QUEUED\r\n");
         } else if (command === "ping") {
           connection.write("+PONG\r\n");
+        } else if (command === "replconf") {
+          connection.write("+OK\r\n");
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
