@@ -149,6 +149,8 @@ const server = net.createServer((connection) => {
           connection.write("+PONG\r\n");
         } else if (command === "replconf") {
           connection.write("+OK\r\n");
+        } else if (command === "psync") {
+          connection.write("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
