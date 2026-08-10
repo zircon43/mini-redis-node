@@ -5,6 +5,7 @@ console.log("Logs from your program will appear here!");
 
 const store = new Map();
 const clients = new Set();
+const replicas = new Set();
 
 let isReplica = false;
 let masterHost = null;
@@ -121,8 +122,14 @@ function checkBlockedClients(key) {
 // Uncomment the code below to pass the first stage
 const server = net.createServer((connection) => {
   clients.add(connection);
-  connection.on("end", () => clients.delete(connection));
-  connection.on("error", () => clients.delete(connection));
+  connection.on("end", () => {
+    clients.delete(connection);
+    replicas.delete(connection);
+  });
+  connection.on("error", () => {
+    clients.delete(connection);
+    replicas.delete(connection);
+  });
   connection.on("data", (data) => {
     const lines = data.toString().split("\r\n");
     
@@ -155,6 +162,7 @@ const server = net.createServer((connection) => {
           const emptyRdb = Buffer.from(emptyRdbHex, "hex");
           connection.write(`$${emptyRdb.length}\r\n`);
           connection.write(emptyRdb);
+          replicas.add(connection);
         } else if (command === "echo") {
           const arg = args[1];
           connection.write(`$${arg.length}\r\n${arg}\r\n`);
@@ -256,6 +264,14 @@ const server = net.createServer((connection) => {
           
           store.set(key, { value, expiresAt });
           connection.write("+OK\r\n");
+          
+          let respStr = `*${args.length}\r\n`;
+          for (const arg of args) {
+             respStr += `$${arg.length}\r\n${arg}\r\n`;
+          }
+          for (const replica of replicas) {
+             replica.write(respStr);
+          }
         } else if (command === "get") {
           const key = args[1];
           const entry = store.get(key);
