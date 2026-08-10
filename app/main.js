@@ -151,8 +151,8 @@ const server = net.createServer((connection) => {
           connection.write("+OK\r\n");
         } else if (command === "psync") {
           connection.write("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
-          const emptyRdbBase64 = "UkVESVMwMDEx+AlyZWRpcy12ZXI1LjIuMPpKcmVkaXMtYml0c8FAMQpjdGltZcptCLvl+Ad1c2VkLW1lbcKswcEQAApib2YtYmFzZcAA/vBuO/7A/1qKog==";
-          const emptyRdb = Buffer.from(emptyRdbBase64, "base64");
+          const emptyRdbHex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
+          const emptyRdb = Buffer.from(emptyRdbHex, "hex");
           connection.write(`$${emptyRdb.length}\r\n`);
           connection.write(emptyRdb);
         } else if (command === "echo") {
