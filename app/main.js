@@ -643,21 +643,113 @@ server.listen(port, "127.0.0.1");
 
 if (isReplica) {
   let handshakeStep = 0;
+  let masterBuffer = Buffer.alloc(0);
+  let rdbSize = -1;
   const masterConn = net.createConnection({ host: masterHost, port: masterPort }, () => {
     masterConn.write("*1\r\n$4\r\nPING\r\n");
   });
   
   masterConn.on("data", (data) => {
-    if (handshakeStep === 0) {
-      const portStr = port.toString();
-      masterConn.write(`*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$${portStr.length}\r\n${portStr}\r\n`);
-      handshakeStep++;
-    } else if (handshakeStep === 1) {
-      masterConn.write("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n");
-      handshakeStep++;
-    } else if (handshakeStep === 2) {
-      masterConn.write("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n");
-      handshakeStep++;
+    masterBuffer = Buffer.concat([masterBuffer, data]);
+    
+    while (masterBuffer.length > 0) {
+      if (handshakeStep === 0) {
+        const idx = masterBuffer.indexOf("\r\n");
+        if (idx !== -1) {
+          masterBuffer = masterBuffer.slice(idx + 2);
+          const portStr = port.toString();
+          masterConn.write(`*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$${portStr.length}\r\n${portStr}\r\n`);
+          handshakeStep++;
+        } else break;
+      } else if (handshakeStep === 1) {
+        const idx = masterBuffer.indexOf("\r\n");
+        if (idx !== -1) {
+          masterBuffer = masterBuffer.slice(idx + 2);
+          masterConn.write("*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n");
+          handshakeStep++;
+        } else break;
+      } else if (handshakeStep === 2) {
+        const idx = masterBuffer.indexOf("\r\n");
+        if (idx !== -1) {
+          masterBuffer = masterBuffer.slice(idx + 2);
+          masterConn.write("*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n");
+          handshakeStep++;
+        } else break;
+      } else if (handshakeStep === 3) {
+        const idx = masterBuffer.indexOf("\r\n");
+        if (idx !== -1) {
+          masterBuffer = masterBuffer.slice(idx + 2);
+          handshakeStep++;
+        } else break;
+      } else if (handshakeStep === 4) {
+        if (rdbSize === -1) {
+          const idx = masterBuffer.indexOf("\r\n");
+          if (idx !== -1) {
+            const header = masterBuffer.slice(0, idx).toString();
+            masterBuffer = masterBuffer.slice(idx + 2);
+            if (header.startsWith("$")) {
+              rdbSize = parseInt(header.slice(1), 10);
+            }
+          } else break;
+        }
+        if (rdbSize !== -1) {
+          if (masterBuffer.length >= rdbSize) {
+            masterBuffer = masterBuffer.slice(rdbSize);
+            handshakeStep++;
+          } else break;
+        }
+      } else if (handshakeStep === 5) {
+        let offset = 0;
+        const readLine = () => {
+          const idx = masterBuffer.indexOf("\r\n", offset);
+          if (idx === -1) return null;
+          const line = masterBuffer.slice(offset, idx).toString();
+          offset = idx + 2;
+          return line;
+        };
+
+        const firstLine = readLine();
+        if (firstLine === null) break;
+
+        if (firstLine.startsWith("*")) {
+          const numArgs = parseInt(firstLine.slice(1), 10);
+          const args = [];
+          let hasFullCommand = true;
+
+          for (let i = 0; i < numArgs; i++) {
+            const lenLine = readLine();
+            if (lenLine === null) { hasFullCommand = false; break; }
+            
+            const argLen = parseInt(lenLine.slice(1), 10);
+            if (masterBuffer.length < offset + argLen + 2) {
+              hasFullCommand = false; break;
+            }
+            
+            const arg = masterBuffer.slice(offset, offset + argLen).toString();
+            offset += argLen + 2;
+            args.push(arg);
+          }
+
+          if (hasFullCommand) {
+            masterBuffer = masterBuffer.slice(offset);
+            
+            const command = args[0].toLowerCase();
+            if (command === "set") {
+              const key = args[1];
+              const value = args[2];
+              let expiresAt = null;
+              if (args.length >= 5 && args[3].toLowerCase() === "px") {
+                expiresAt = Date.now() + parseInt(args[4], 10);
+              }
+              store.set(key, { value, expiresAt });
+            }
+          } else {
+            break;
+          }
+        } else {
+          masterBuffer = masterBuffer.slice(offset);
+        }
+      }
     }
   });
 }
