@@ -742,6 +742,10 @@ if (isReplica) {
                 expiresAt = Date.now() + parseInt(args[4], 10);
               }
               store.set(key, { value, expiresAt });
+            } else if (command === "replconf") {
+              if (args.length >= 3 && args[1].toLowerCase() === "getack") {
+                masterConn.write("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n");
+              }
             }
           } else {
             break;
