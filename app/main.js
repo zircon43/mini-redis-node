@@ -645,6 +645,7 @@ if (isReplica) {
   let handshakeStep = 0;
   let masterBuffer = Buffer.alloc(0);
   let rdbSize = -1;
+  let processedBytes = 0;
   const masterConn = net.createConnection({ host: masterHost, port: masterPort }, () => {
     masterConn.write("*1\r\n$4\r\nPING\r\n");
   });
@@ -744,9 +745,12 @@ if (isReplica) {
               store.set(key, { value, expiresAt });
             } else if (command === "replconf") {
               if (args.length >= 3 && args[1].toLowerCase() === "getack") {
-                masterConn.write("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n");
+                const pbStr = processedBytes.toString();
+                masterConn.write(`*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$${pbStr.length}\r\n${pbStr}\r\n`);
               }
             }
+            
+            processedBytes += offset;
           } else {
             break;
           }
