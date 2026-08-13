@@ -1,4 +1,5 @@
 const net = require("net");
+let master_repl_offset = 0;
 
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
@@ -155,7 +156,11 @@ const server = net.createServer((connection) => {
         } else if (command === "ping") {
           connection.write("+PONG\r\n");
         } else if (command === "replconf") {
-          connection.write("+OK\r\n");
+          if (args.length >= 3 && args[1].toLowerCase() === "ack") {
+            connection.ackedOffset = parseInt(args[2], 10);
+          } else {
+            connection.write("+OK\r\n");
+          }
         } else if (command === "psync") {
           connection.write("+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n");
           const emptyRdbHex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
@@ -272,8 +277,48 @@ const server = net.createServer((connection) => {
           for (const replica of replicas) {
              replica.write(respStr);
           }
+          master_repl_offset += respStr.length;
         } else if (command === "wait") {
-          connection.write(`:${replicas.size}\r\n`);
+          const numReplicas = parseInt(args[1], 10);
+          const timeout = parseInt(args[2], 10);
+
+          if (master_repl_offset === 0) {
+            connection.write(`:${replicas.size}\r\n`);
+          } else {
+            let ackCount = 0;
+            for (const replica of replicas) {
+              if ((replica.ackedOffset || 0) >= master_repl_offset) {
+                ackCount++;
+              }
+            }
+
+            if (ackCount >= numReplicas) {
+              connection.write(`:${ackCount}\r\n`);
+            } else {
+              const getAckStr = "*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n";
+              const targetOffset = master_repl_offset;
+              for (const replica of replicas) {
+                replica.write(getAckStr);
+              }
+              master_repl_offset += getAckStr.length;
+
+              let timeElapsed = 0;
+              const interval = 50;
+              const waitInterval = setInterval(() => {
+                ackCount = 0;
+                for (const replica of replicas) {
+                  if ((replica.ackedOffset || 0) >= targetOffset) {
+                    ackCount++;
+                  }
+                }
+                timeElapsed += interval;
+                if (ackCount >= numReplicas || (timeout > 0 && timeElapsed >= timeout)) {
+                  clearInterval(waitInterval);
+                  connection.write(`:${ackCount}\r\n`);
+                }
+              }, interval);
+            }
+          }
         } else if (command === "get") {
           const key = args[1];
           const entry = store.get(key);
