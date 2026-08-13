@@ -272,6 +272,8 @@ const server = net.createServer((connection) => {
           for (const replica of replicas) {
              replica.write(respStr);
           }
+        } else if (command === "wait") {
+          connection.write(`:${replicas.size}\r\n`);
         } else if (command === "get") {
           const key = args[1];
           const entry = store.get(key);
