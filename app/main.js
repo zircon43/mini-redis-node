@@ -278,6 +278,15 @@ const server = net.createServer((connection) => {
              replica.write(respStr);
           }
           master_repl_offset += respStr.length;
+        } else if (command === "config") {
+          if (args.length >= 3 && args[1].toLowerCase() === "get") {
+            const param = args[2].toLowerCase();
+            let val = "";
+            if (param === "dir") val = dir;
+            else if (param === "dbfilename") val = dbfilename;
+            
+            connection.write(`*2\r\n$${param.length}\r\n${param}\r\n$${val.length}\r\n${val}\r\n`);
+          }
         } else if (command === "wait") {
           const numReplicas = parseInt(args[1], 10);
           const timeout = parseInt(args[2], 10);
@@ -684,6 +693,18 @@ let port = 6379;
 const portArgIdx = process.argv.indexOf("--port");
 if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
   port = parseInt(process.argv[portArgIdx + 1], 10);
+}
+
+let dir = "";
+const dirArgIdx = process.argv.indexOf("--dir");
+if (dirArgIdx !== -1 && dirArgIdx + 1 < process.argv.length) {
+  dir = process.argv[dirArgIdx + 1];
+}
+
+let dbfilename = "";
+const dbfilenameArgIdx = process.argv.indexOf("--dbfilename");
+if (dbfilenameArgIdx !== -1 && dbfilenameArgIdx + 1 < process.argv.length) {
+  dbfilename = process.argv[dbfilenameArgIdx + 1];
 }
 
 server.listen(port, "127.0.0.1");
