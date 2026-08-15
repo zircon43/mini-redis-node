@@ -1,4 +1,6 @@
 const net = require("net");
+const fs = require("fs");
+const path = require("path");
 let master_repl_offset = 0;
 
 // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -287,6 +289,13 @@ const server = net.createServer((connection) => {
             
             connection.write(`*2\r\n$${param.length}\r\n${param}\r\n$${val.length}\r\n${val}\r\n`);
           }
+        } else if (command === "keys") {
+          const keys = Array.from(store.keys());
+          let res = `*${keys.length}\r\n`;
+          for (const key of keys) {
+             res += `$${key.length}\r\n${key}\r\n`;
+          }
+          connection.write(res);
         } else if (command === "wait") {
           const numReplicas = parseInt(args[1], 10);
           const timeout = parseInt(args[2], 10);
@@ -706,6 +715,86 @@ const dbfilenameArgIdx = process.argv.indexOf("--dbfilename");
 if (dbfilenameArgIdx !== -1 && dbfilenameArgIdx + 1 < process.argv.length) {
   dbfilename = process.argv[dbfilenameArgIdx + 1];
 }
+
+function parseRdb(dir, dbfilename) {
+   if (!dir || !dbfilename) return;
+   const fullPath = path.join(dir, dbfilename);
+   if (!fs.existsSync(fullPath)) return;
+   
+   const buf = fs.readFileSync(fullPath);
+   let offset = 0;
+
+   const readLength = () => {
+      const first = buf[offset++];
+      const type = (first & 0xC0) >> 6;
+      if (type === 0) {
+         return { val: first & 0x3F, isSpecial: false };
+      } else if (type === 1) {
+         const second = buf[offset++];
+         return { val: ((first & 0x3F) << 8) | second, isSpecial: false };
+      } else if (type === 2) {
+         const val = buf.readUInt32BE(offset);
+         offset += 4;
+         return { val, isSpecial: false };
+      } else {
+         return { val: first & 0x3F, isSpecial: true };
+      }
+   };
+
+   const readString = () => {
+      const { val, isSpecial } = readLength();
+      if (isSpecial) {
+         if (val === 0) {
+            const v = buf.readInt8(offset++);
+            return String(v);
+         } else if (val === 1) {
+            const v = buf.readInt16LE(offset);
+            offset += 2;
+            return String(v);
+         } else if (val === 2) {
+            const v = buf.readInt32LE(offset);
+            offset += 4;
+            return String(v);
+         } else if (val === 3) {
+            throw new Error("LZF compressed strings not supported in basic parser");
+         }
+      }
+      const str = buf.slice(offset, offset + val).toString("utf-8");
+      offset += val;
+      return str;
+   };
+
+   offset += 9; // Skip REDISxxxx magic and version
+
+   while (offset < buf.length) {
+      const opcode = buf[offset++];
+      if (opcode === 0xFF) {
+         break;
+      } else if (opcode === 0xFA) {
+         readString(); // metadata key
+         readString(); // metadata value
+      } else if (opcode === 0xFE) {
+         readLength(); // db index
+      } else if (opcode === 0xFB) {
+         readLength(); // hash table size
+         readLength(); // expire hash table size
+      } else if (opcode === 0xFC || opcode === 0xFD) {
+         if (opcode === 0xFC) offset += 8; // expire time ms
+         if (opcode === 0xFD) offset += 4; // expire time s
+         const type = buf[offset++]; // value type
+         const key = readString();
+         const value = readString();
+         store.set(key, { value, expiresAt: null });
+      } else {
+         const type = opcode; // assume 0x00 (string) for this stage
+         const key = readString();
+         const value = readString();
+         store.set(key, { value, expiresAt: null });
+      }
+   }
+}
+
+parseRdb(dir, dbfilename);
 
 server.listen(port, "127.0.0.1");
 
