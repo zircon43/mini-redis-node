@@ -779,12 +779,19 @@ function parseRdb(dir, dbfilename) {
          readLength(); // hash table size
          readLength(); // expire hash table size
       } else if (opcode === 0xFC || opcode === 0xFD) {
-         if (opcode === 0xFC) offset += 8; // expire time ms
-         if (opcode === 0xFD) offset += 4; // expire time s
+         let expiresAt = null;
+         if (opcode === 0xFC) {
+            expiresAt = Number(buf.readBigUInt64LE(offset));
+            offset += 8;
+         }
+         if (opcode === 0xFD) {
+            expiresAt = buf.readUInt32LE(offset) * 1000;
+            offset += 4;
+         }
          const type = buf[offset++]; // value type
          const key = readString();
          const value = readString();
-         store.set(key, { value, expiresAt: null });
+         store.set(key, { value, expiresAt });
       } else {
          const type = opcode; // assume 0x00 (string) for this stage
          const key = readString();
