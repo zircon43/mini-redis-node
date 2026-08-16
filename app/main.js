@@ -286,6 +286,10 @@ const server = net.createServer((connection) => {
             let val = "";
             if (param === "dir") val = dir;
             else if (param === "dbfilename") val = dbfilename;
+            else if (param === "appendonly") val = "no";
+            else if (param === "appenddirname") val = "appendonlydir";
+            else if (param === "appendfilename") val = "appendonly.aof";
+            else if (param === "appendfsync") val = "everysec";
             
             connection.write(`*2\r\n$${param.length}\r\n${param}\r\n$${val.length}\r\n${val}\r\n`);
           }
@@ -704,7 +708,7 @@ if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
   port = parseInt(process.argv[portArgIdx + 1], 10);
 }
 
-let dir = "";
+let dir = process.cwd();
 const dirArgIdx = process.argv.indexOf("--dir");
 if (dirArgIdx !== -1 && dirArgIdx + 1 < process.argv.length) {
   dir = process.argv[dirArgIdx + 1];
