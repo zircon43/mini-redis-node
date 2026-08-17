@@ -744,6 +744,13 @@ if (appendfsyncArgIdx !== -1 && appendfsyncArgIdx + 1 < process.argv.length) {
   appendfsync = process.argv[appendfsyncArgIdx + 1];
 }
 
+if (appendonly.toLowerCase() === "yes") {
+   const aofDir = path.join(dir, appenddirname);
+   if (!fs.existsSync(aofDir)) {
+      fs.mkdirSync(aofDir, { recursive: true });
+   }
+}
+
 function parseRdb(dir, dbfilename) {
    if (!dir || !dbfilename) return;
    const fullPath = path.join(dir, dbfilename);
