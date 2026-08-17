@@ -286,10 +286,10 @@ const server = net.createServer((connection) => {
             let val = "";
             if (param === "dir") val = dir;
             else if (param === "dbfilename") val = dbfilename;
-            else if (param === "appendonly") val = "no";
-            else if (param === "appenddirname") val = "appendonlydir";
-            else if (param === "appendfilename") val = "appendonly.aof";
-            else if (param === "appendfsync") val = "everysec";
+            else if (param === "appendonly") val = appendonly;
+            else if (param === "appenddirname") val = appenddirname;
+            else if (param === "appendfilename") val = appendfilename;
+            else if (param === "appendfsync") val = appendfsync;
             
             connection.write(`*2\r\n$${param.length}\r\n${param}\r\n$${val.length}\r\n${val}\r\n`);
           }
@@ -718,6 +718,30 @@ let dbfilename = "";
 const dbfilenameArgIdx = process.argv.indexOf("--dbfilename");
 if (dbfilenameArgIdx !== -1 && dbfilenameArgIdx + 1 < process.argv.length) {
   dbfilename = process.argv[dbfilenameArgIdx + 1];
+}
+
+let appendonly = "no";
+const appendonlyArgIdx = process.argv.indexOf("--appendonly");
+if (appendonlyArgIdx !== -1 && appendonlyArgIdx + 1 < process.argv.length) {
+  appendonly = process.argv[appendonlyArgIdx + 1];
+}
+
+let appenddirname = "appendonlydir";
+const appenddirnameArgIdx = process.argv.indexOf("--appenddirname");
+if (appenddirnameArgIdx !== -1 && appenddirnameArgIdx + 1 < process.argv.length) {
+  appenddirname = process.argv[appenddirnameArgIdx + 1];
+}
+
+let appendfilename = "appendonly.aof";
+const appendfilenameArgIdx = process.argv.indexOf("--appendfilename");
+if (appendfilenameArgIdx !== -1 && appendfilenameArgIdx + 1 < process.argv.length) {
+  appendfilename = process.argv[appendfilenameArgIdx + 1];
+}
+
+let appendfsync = "everysec";
+const appendfsyncArgIdx = process.argv.indexOf("--appendfsync");
+if (appendfsyncArgIdx !== -1 && appendfsyncArgIdx + 1 < process.argv.length) {
+  appendfsync = process.argv[appendfsyncArgIdx + 1];
 }
 
 function parseRdb(dir, dbfilename) {
