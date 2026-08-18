@@ -754,6 +754,11 @@ if (appendonly.toLowerCase() === "yes") {
    if (!fs.existsSync(aofFile)) {
       fs.writeFileSync(aofFile, "");
    }
+   
+   const manifestFile = path.join(aofDir, `${appendfilename}.manifest`);
+   if (!fs.existsSync(manifestFile)) {
+      fs.writeFileSync(manifestFile, `file ${appendfilename}.1.incr.aof seq 1 type i\n`);
+   }
 }
 
 function parseRdb(dir, dbfilename) {
