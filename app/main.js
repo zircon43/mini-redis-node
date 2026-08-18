@@ -749,6 +749,11 @@ if (appendonly.toLowerCase() === "yes") {
    if (!fs.existsSync(aofDir)) {
       fs.mkdirSync(aofDir, { recursive: true });
    }
+   
+   const aofFile = path.join(aofDir, `${appendfilename}.1.incr.aof`);
+   if (!fs.existsSync(aofFile)) {
+      fs.writeFileSync(aofFile, "");
+   }
 }
 
 function parseRdb(dir, dbfilename) {
