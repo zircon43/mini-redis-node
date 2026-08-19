@@ -2,6 +2,7 @@ const net = require("net");
 const fs = require("fs");
 const path = require("path");
 let master_repl_offset = 0;
+let activeAofFile = "";
 
 // You can use print statements as follows for debugging, they'll be visible when running tests.
 console.log("Logs from your program will appear here!");
@@ -152,6 +153,16 @@ const server = net.createServer((connection) => {
       if (args.length > 0) {
         const command = args[0].toLowerCase();
         
+        const appendToAof = () => {
+           if (appendonly.toLowerCase() === "yes" && activeAofFile) {
+              let respStr = `*${args.length}\r\n`;
+              for (const arg of args) {
+                 respStr += `$${arg.length}\r\n${arg}\r\n`;
+              }
+              fs.appendFileSync(activeAofFile, respStr);
+           }
+        };
+        
         if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi" && command !== "watch") {
           connection.queued.push(args);
           connection.write("+QUEUED\r\n");
@@ -255,11 +266,13 @@ const server = net.createServer((connection) => {
           }
           
           if (isValid) {
+             appendToAof();
              val++;
              store.set(key, { value: val.toString(), type: "string", expiresAt: entry ? entry.expiresAt : null });
              connection.write(`:${val}\r\n`);
           }
         } else if (command === "set") {
+          appendToAof();
           const key = args[1];
           const value = args[2];
           let expiresAt = null;
@@ -366,6 +379,7 @@ const server = net.createServer((connection) => {
           }
           
           list.push(...elements);
+          appendToAof();
           store.set(key, { value: list, expiresAt: null });
           
           connection.write(`:${list.length}\r\n`);
@@ -383,6 +397,7 @@ const server = net.createServer((connection) => {
           for (const elem of elements) {
             list.unshift(elem);
           }
+          appendToAof();
           store.set(key, { value: list, expiresAt: null });
           
           connection.write(`:${list.length}\r\n`);
@@ -750,14 +765,29 @@ if (appendonly.toLowerCase() === "yes") {
       fs.mkdirSync(aofDir, { recursive: true });
    }
    
-   const aofFile = path.join(aofDir, `${appendfilename}.1.incr.aof`);
-   if (!fs.existsSync(aofFile)) {
-      fs.writeFileSync(aofFile, "");
+   const manifestFile = path.join(aofDir, `${appendfilename}.manifest`);
+   if (fs.existsSync(manifestFile)) {
+      const manifestContent = fs.readFileSync(manifestFile, "utf-8");
+      const lines = manifestContent.split("\n");
+      for (const line of lines) {
+         if (line.includes("type i")) {
+            const parts = line.split(" ");
+            const fileIdx = parts.indexOf("file");
+            if (fileIdx !== -1 && fileIdx + 1 < parts.length) {
+               activeAofFile = path.join(aofDir, parts[fileIdx + 1]);
+            }
+         }
+      }
    }
    
-   const manifestFile = path.join(aofDir, `${appendfilename}.manifest`);
-   if (!fs.existsSync(manifestFile)) {
-      fs.writeFileSync(manifestFile, `file ${appendfilename}.1.incr.aof seq 1 type i\n`);
+   if (!activeAofFile) {
+      activeAofFile = path.join(aofDir, `${appendfilename}.1.incr.aof`);
+      if (!fs.existsSync(activeAofFile)) {
+         fs.writeFileSync(activeAofFile, "");
+      }
+      if (!fs.existsSync(manifestFile)) {
+         fs.writeFileSync(manifestFile, `file ${path.basename(activeAofFile)} seq 1 type i\n`);
+      }
    }
 }
 
