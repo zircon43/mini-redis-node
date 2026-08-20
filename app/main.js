@@ -789,6 +789,81 @@ if (appendonly.toLowerCase() === "yes") {
          fs.writeFileSync(manifestFile, `file ${path.basename(activeAofFile)} seq 1 type i\n`);
       }
    }
+   
+   if (fs.existsSync(activeAofFile)) {
+      replayAof(activeAofFile);
+   }
+}
+
+function replayAof(filePath) {
+   const content = fs.readFileSync(filePath, "utf-8");
+   if (!content) return;
+   
+   let i = 0;
+   const readUntilCrlf = () => {
+       const nextI = content.indexOf("\r\n", i);
+       if (nextI === -1) return null;
+       const res = content.slice(i, nextI);
+       i = nextI + 2;
+       return res;
+   };
+   
+   while (i < content.length) {
+       const line = readUntilCrlf();
+       if (!line) break;
+       if (line.startsWith("*")) {
+           const numArgs = parseInt(line.slice(1), 10);
+           const args = [];
+           for (let j = 0; j < numArgs; j++) {
+               const lenLine = readUntilCrlf();
+               const strLine = readUntilCrlf();
+               if (strLine !== null) {
+                   args.push(strLine);
+               }
+           }
+           if (args.length > 0) {
+               const command = args[0].toLowerCase();
+               if (command === "set") {
+                   const key = args[1];
+                   const value = args[2];
+                   let expiresAt = null;
+                   if (args.length >= 5 && args[3].toLowerCase() === "px") {
+                       expiresAt = Date.now() + parseInt(args[4], 10);
+                   }
+                   store.set(key, { value, expiresAt });
+               } else if (command === "incr") {
+                   const key = args[1];
+                   const entry = store.get(key);
+                   let val = 0;
+                   let isValid = true;
+                   if (entry !== undefined) {
+                       val = parseInt(entry.value, 10);
+                       if (isNaN(val)) isValid = false;
+                   }
+                   if (isValid) {
+                       val++;
+                       store.set(key, { value: val.toString(), type: "string", expiresAt: entry ? entry.expiresAt : null });
+                   }
+               } else if (command === "lpush") {
+                   const key = args[1];
+                   const elements = args.slice(2);
+                   let list = [];
+                   const entry = store.get(key);
+                   if (entry && Array.isArray(entry.value)) list = entry.value;
+                   for (const elem of elements) list.unshift(elem);
+                   store.set(key, { value: list, expiresAt: null });
+               } else if (command === "rpush") {
+                   const key = args[1];
+                   const elements = args.slice(2);
+                   let list = [];
+                   const entry = store.get(key);
+                   if (entry && Array.isArray(entry.value)) list = entry.value;
+                   list.push(...elements);
+                   store.set(key, { value: list, expiresAt: null });
+               }
+           }
+       }
+   }
 }
 
 function parseRdb(dir, dbfilename) {
