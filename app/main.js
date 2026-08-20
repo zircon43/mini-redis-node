@@ -163,11 +163,28 @@ const server = net.createServer((connection) => {
            }
         };
         
-        if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi" && command !== "watch") {
+        if (!connection.subscribedChannels) {
+            connection.subscribedChannels = new Set();
+         }
+         
+         if (connection.subscribedChannels.size > 0) {
+            const allowed = ["subscribe", "unsubscribe", "psubscribe", "punsubscribe", "ping", "quit", "reset"];
+            if (!allowed.includes(command)) {
+               connection.write(`-ERR Can't execute '${command}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n`);
+               return; // Skip further processing
+            }
+         }
+         
+         if (connection.isMulti && command !== "exec" && command !== "discard" && command !== "multi" && command !== "watch") {
           connection.queued.push(args);
           connection.write("+QUEUED\r\n");
         } else if (command === "ping") {
-          connection.write("+PONG\r\n");
+           if (connection.subscribedChannels.size > 0) {
+              const resp = args.length > 1 ? args[1] : "";
+              connection.write(`*2\r\n$4\r\npong\r\n$${resp.length}\r\n${resp}\r\n`);
+           } else {
+              connection.write("+PONG\r\n");
+           }
         } else if (command === "replconf") {
           if (args.length >= 3 && args[1].toLowerCase() === "ack") {
             connection.ackedOffset = parseInt(args[2], 10);
@@ -710,6 +727,13 @@ const server = net.createServer((connection) => {
                let res = `*${streamResponses.length}\r\n` + streamResponses.join("");
                connection.write(res);
             }
+          }
+        } else if (command === "subscribe") {
+          const channels = args.slice(1);
+          for (const channel of channels) {
+             connection.subscribedChannels.add(channel);
+             const num = connection.subscribedChannels.size;
+             connection.write(`*3\r\n$9\r\nsubscribe\r\n$${channel.length}\r\n${channel}\r\n:${num}\r\n`);
           }
         }
       }
