@@ -728,6 +728,126 @@ const server = net.createServer((connection) => {
                connection.write(res);
             }
           }
+        } else if (command === "zadd") {
+          appendToAof();
+          const key = args[1];
+          const score = parseFloat(args[2]);
+          const member = args[3];
+
+          let entry = store.get(key);
+          let added = 0;
+
+          if (!entry || entry.type !== "zset") {
+             entry = { value: [], type: "zset", expiresAt: null };
+             store.set(key, entry);
+          }
+
+          let zset = entry.value;
+          let existingIdx = zset.findIndex(e => e.member === member);
+
+          const sortZSet = () => {
+             zset.sort((a, b) => {
+                if (a.score !== b.score) return a.score - b.score;
+                if (a.member < b.member) return -1;
+                if (a.member > b.member) return 1;
+                return 0;
+             });
+          };
+
+          if (existingIdx !== -1) {
+             if (zset[existingIdx].score !== score) {
+                zset[existingIdx].score = score;
+                sortZSet();
+             }
+             connection.write(":0\r\n");
+          } else {
+             zset.push({ score, member });
+             sortZSet();
+             connection.write(":1\r\n");
+          }
+        } else if (command === "zrank") {
+          const key = args[1];
+          const member = args[2];
+          const entry = store.get(key);
+          if (!entry || entry.type !== "zset") {
+             connection.write("$-1\r\n");
+          } else {
+             const idx = entry.value.findIndex(e => e.member === member);
+             if (idx === -1) {
+                connection.write("$-1\r\n");
+             } else {
+                connection.write(`:${idx}\r\n`);
+             }
+          }
+        } else if (command === "zrange") {
+          const key = args[1];
+          let start = parseInt(args[2], 10);
+          let stop = parseInt(args[3], 10);
+          
+          const entry = store.get(key);
+          if (!entry || entry.type !== "zset") {
+             connection.write("*0\r\n");
+          } else {
+             const zset = entry.value;
+             const len = zset.length;
+             
+             if (start < 0) start = len + start;
+             if (stop < 0) stop = len + stop;
+             
+             if (start < 0) start = 0;
+             if (stop < 0) stop = 0;
+             
+             if (start >= len || start > stop) {
+                connection.write("*0\r\n");
+             } else {
+                if (stop >= len) stop = len - 1;
+                const result = zset.slice(start, stop + 1);
+                let resStr = `*${result.length}\r\n`;
+                for (const item of result) {
+                   resStr += `$${item.member.length}\r\n${item.member}\r\n`;
+                }
+                connection.write(resStr);
+             }
+          }
+        } else if (command === "zcard") {
+          const key = args[1];
+          const entry = store.get(key);
+          if (!entry || entry.type !== "zset") {
+             connection.write(":0\r\n");
+          } else {
+             connection.write(`:${entry.value.length}\r\n`);
+          }
+        } else if (command === "zscore") {
+          const key = args[1];
+          const member = args[2];
+          const entry = store.get(key);
+          if (!entry || entry.type !== "zset") {
+             connection.write("$-1\r\n");
+          } else {
+             const existing = entry.value.find(e => e.member === member);
+             if (!existing) {
+                connection.write("$-1\r\n");
+             } else {
+                const scoreStr = existing.score.toString();
+                connection.write(`$${scoreStr.length}\r\n${scoreStr}\r\n`);
+             }
+          }
+        } else if (command === "zrem") {
+          appendToAof();
+          const key = args[1];
+          const member = args[2];
+          const entry = store.get(key);
+          if (!entry || entry.type !== "zset") {
+             connection.write(":0\r\n");
+          } else {
+             const idx = entry.value.findIndex(e => e.member === member);
+             if (idx === -1) {
+                connection.write(":0\r\n");
+             } else {
+                entry.value.splice(idx, 1);
+                connection.write(":1\r\n");
+             }
+          }
         } else if (command === "subscribe") {
           const channels = args.slice(1);
           for (const channel of channels) {
@@ -912,7 +1032,39 @@ function replayAof(filePath) {
                    if (entry && Array.isArray(entry.value)) list = entry.value;
                    list.push(...elements);
                    store.set(key, { value: list, expiresAt: null });
-               }
+                } else if (command === "zadd") {
+                    const key = args[1];
+                    const score = parseFloat(args[2]);
+                    const member = args[3];
+                    let entry = store.get(key);
+                    if (!entry || entry.type !== "zset") {
+                       entry = { value: [], type: "zset", expiresAt: null };
+                       store.set(key, entry);
+                    }
+                    let zset = entry.value;
+                    let existingIdx = zset.findIndex(e => e.member === member);
+                    if (existingIdx !== -1) {
+                       zset[existingIdx].score = score;
+                    } else {
+                       zset.push({ score, member });
+                    }
+                    zset.sort((a, b) => {
+                       if (a.score !== b.score) return a.score - b.score;
+                       if (a.member < b.member) return -1;
+                       if (a.member > b.member) return 1;
+                       return 0;
+                    });
+                } else if (command === "zrem") {
+                    const key = args[1];
+                    const member = args[2];
+                    const entry = store.get(key);
+                    if (entry && entry.type === "zset") {
+                       const idx = entry.value.findIndex(e => e.member === member);
+                       if (idx !== -1) {
+                          entry.value.splice(idx, 1);
+                       }
+                    }
+                }
            }
        }
    }
