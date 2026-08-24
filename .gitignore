@@ -1,2 +1,5 @@
 # Dependency directories
 node_modules/
+report.pdf
+generate_report.js
+report.md

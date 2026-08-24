@@ -3,6 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+const config = require('./config');
+const { parseCommands } = require('./resp');
+const { haversine, encodeGeoHash, decodeGeoHash } = require('./geoUtils');
+
 const users = {
     "default": {
         flags: ["nopass"],
@@ -20,16 +24,9 @@ const store = new Map();
 const clients = new Set();
 const replicas = new Set();
 
-let isReplica = false;
-let masterHost = null;
-let masterPort = null;
-const replicaofArgIdx = process.argv.indexOf("--replicaof");
-if (replicaofArgIdx !== -1 && replicaofArgIdx + 1 < process.argv.length) {
-  isReplica = true;
-  const parts = process.argv[replicaofArgIdx + 1].split(" ");
-  masterHost = parts[0];
-  masterPort = parseInt(parts[1], 10);
-}
+let isReplica = config.isReplica;
+let masterHost = config.masterHost;
+let masterPort = config.masterPort;
 
 const originalStoreSet = store.set.bind(store);
 store.set = (key, value) => {
@@ -150,22 +147,10 @@ const server = net.createServer((connection) => {
     replicas.delete(connection);
   });
   connection.on("data", (data) => {
-    const lines = data.toString().split("\r\n");
+    const args = parseCommands(data);
+    if (!args) return;
     
-    if (lines[0].startsWith("*")) {
-      const numArgs = parseInt(lines[0].slice(1), 10);
-      const args = [];
-      let currentLine = 1;
-      
-      for (let i = 0; i < numArgs; i++) {
-        if (lines[currentLine].startsWith("$")) {
-          currentLine++; // Skip the length line (e.g., $4)
-          args.push(lines[currentLine]); // Add the actual string
-          currentLine++;
-        }
-      }
-      
-      if (args.length > 0) {
+    if (args.length > 0) {
         const command = args[0].toLowerCase();
         
         if (!connection.authenticatedUser && command !== "auth") {
@@ -1094,47 +1079,13 @@ const server = net.createServer((connection) => {
   });
 });
 
-let port = 6379;
-const portArgIdx = process.argv.indexOf("--port");
-if (portArgIdx !== -1 && portArgIdx + 1 < process.argv.length) {
-  port = parseInt(process.argv[portArgIdx + 1], 10);
-}
-
-let dir = process.cwd();
-const dirArgIdx = process.argv.indexOf("--dir");
-if (dirArgIdx !== -1 && dirArgIdx + 1 < process.argv.length) {
-  dir = process.argv[dirArgIdx + 1];
-}
-
-let dbfilename = "";
-const dbfilenameArgIdx = process.argv.indexOf("--dbfilename");
-if (dbfilenameArgIdx !== -1 && dbfilenameArgIdx + 1 < process.argv.length) {
-  dbfilename = process.argv[dbfilenameArgIdx + 1];
-}
-
-let appendonly = "no";
-const appendonlyArgIdx = process.argv.indexOf("--appendonly");
-if (appendonlyArgIdx !== -1 && appendonlyArgIdx + 1 < process.argv.length) {
-  appendonly = process.argv[appendonlyArgIdx + 1];
-}
-
-let appenddirname = "appendonlydir";
-const appenddirnameArgIdx = process.argv.indexOf("--appenddirname");
-if (appenddirnameArgIdx !== -1 && appenddirnameArgIdx + 1 < process.argv.length) {
-  appenddirname = process.argv[appenddirnameArgIdx + 1];
-}
-
-let appendfilename = "appendonly.aof";
-const appendfilenameArgIdx = process.argv.indexOf("--appendfilename");
-if (appendfilenameArgIdx !== -1 && appendfilenameArgIdx + 1 < process.argv.length) {
-  appendfilename = process.argv[appendfilenameArgIdx + 1];
-}
-
-let appendfsync = "everysec";
-const appendfsyncArgIdx = process.argv.indexOf("--appendfsync");
-if (appendfsyncArgIdx !== -1 && appendfsyncArgIdx + 1 < process.argv.length) {
-  appendfsync = process.argv[appendfsyncArgIdx + 1];
-}
+let port = config.port;
+let dir = config.dir;
+let dbfilename = config.dbfilename;
+let appendonly = config.appendonly;
+let appenddirname = config.appenddirname;
+let appendfilename = config.appendfilename;
+let appendfsync = config.appendfsync;
 
 if (appendonly.toLowerCase() === "yes") {
    const aofDir = path.join(dir, appenddirname);
@@ -1172,60 +1123,6 @@ if (appendonly.toLowerCase() === "yes") {
    }
 }
 
-function haversine(lon1, lat1, lon2, lat2) {
-  const R = 6372797.560856;
-  const toRad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * toRad;
-  const dLon = (lon2 - lon1) * toRad;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.asin(Math.sqrt(a));
-  return R * c;
-}
-
-function encodeGeoHash(lon, lat) {
-  let lon_min = -180, lon_max = 180;
-  let lat_min = -85.05112878, lat_max = 85.05112878;
-  let score = 0n;
-  for (let i = 0; i < 26; i++) {
-     let lon_mid = (lon_min + lon_max) / 2;
-     if (lon >= lon_mid) {
-         score = (score << 1n) | 1n;
-         lon_min = lon_mid;
-     } else {
-         score = (score << 1n) | 0n;
-         lon_max = lon_mid;
-     }
-     let lat_mid = (lat_min + lat_max) / 2;
-     if (lat >= lat_mid) {
-         score = (score << 1n) | 1n;
-         lat_min = lat_mid;
-     } else {
-         score = (score << 1n) | 0n;
-         lat_max = lat_mid;
-     }
-  }
-  return Number(score);
-}
-
-function decodeGeoHash(score) {
-  let lon_min = -180, lon_max = 180;
-  let lat_min = -85.05112878, lat_max = 85.05112878;
-  score = BigInt(Math.floor(score));
-  for (let i = 0n; i < 26n; i++) {
-     let bit_idx = 52n - (i * 2n) - 1n;
-     let lon_bit = (score >> bit_idx) & 1n;
-     if (lon_bit === 1n) lon_min = (lon_min + lon_max) / 2;
-     else lon_max = (lon_min + lon_max) / 2;
-     
-     let lat_bit_idx = 52n - (i * 2n) - 2n;
-     let lat_bit = (score >> lat_bit_idx) & 1n;
-     if (lat_bit === 1n) lat_min = (lat_min + lat_max) / 2;
-     else lat_max = (lat_min + lat_max) / 2;
-  }
-  return [(lon_min + lon_max) / 2, (lat_min + lat_max) / 2];
-}
 
 function replayAof(filePath) {
    const content = fs.readFileSync(filePath, "utf-8");
