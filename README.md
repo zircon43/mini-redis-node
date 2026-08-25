@@ -52,6 +52,11 @@ npm start -- --port 6380 --replicaof "127.0.0.1 6379"
 ```
 
 ## Future Enhancements
-- Eviction policies (LRU/LFU)
-- Hash data structures (`HSET`, `HGET`)
-- Full Cluster support
+- **AOF Rewrite:** Implement `BGREWRITEAOF` for a minimal RESP command sequence, and support AOF RDB Preamble.
+- **RESP3 Protocol:** Upgrade client connections using the `HELLO` command to support newer RESP3 data types.
+- **Sets:** Support for the Set data type (`SADD`, `SMEMBERS`, `SINTER`).
+- **Hashes:** Support for the Hash data type (`HSET`, `HGET`, `HGETALL`).
+- **Bitmaps:** Support for Bitmaps (`SETBIT`, `GETBIT`, `BITCOUNT`).
+- **Lua Scripting:** Execute Lua scripts server-side using `EVAL` and `EVALSHA`.
+- **Bloom Filters:** Add probabilistic data structures (`BF.ADD`, `BF.EXISTS`).
+- **Command Discovery:** Implement the `COMMAND` command to expose metadata.
