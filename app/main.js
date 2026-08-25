@@ -1075,7 +1075,6 @@ const server = net.createServer((connection) => {
           connection.write(`:${numReceivers}\r\n`);
         }
       }
-    }
   });
 });
 
